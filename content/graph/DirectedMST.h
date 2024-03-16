@@ -1,23 +1,20 @@
 /**
- * Author: chilli, Takanori MAEHARA, Benq, Simon Lindholm
- * Date: 2019-05-10
- * License: CC0
- * Source: https://github.com/spaghetti-source/algorithm/blob/master/graph/arborescence.cc
- * and https://github.com/bqi343/USACO/blob/42d177dfb9d6ce350389583cfa71484eb8ae614c/Implementations/content/graphs%20(12)/Advanced/DirectedMST.h for the reconstruction
- * Description: Finds a minimum spanning
- * tree/arborescence of a directed graph, given a root node. If no MST exists, returns -1.
- * Time: O(E \log V)
- * Status: Stress-tested, also tested on NWERC 2018 fastestspeedrun
+ * Description: Chu-Liu-Edmonds algorithm. Computes minimum weight directed 
+ 	* spanning tree rooted at $r$, edge from $par[i]\to i$ for all $i\neq r.$
+ 	* Use DSU with rollback if need to return edges.
+ * Time: O(M\log M)
+ * Source: KACTL
+ 	* https://courses.cs.washington.edu/courses/cse490u/17wi/slides/CLE.pdf
+ * Verification: 
+ 	* https://open.kattis.com/problems/fastestspeedrun
+ 	* https://codeforces.com/problemset/problem/240/E
  */
-#pragma once
 
-#include "../data-structures/UnionFindRollback.h"
+#include "../DSU/DSUrb (15.5).h"
 
 struct Edge { int a, b; ll w; };
-struct Node { /// lazy skew heap node
-	Edge key;
-	Node *l, *r;
-	ll delta;
+struct Node { // lazy skew heap node
+	Edge key; Node *l, *r; ll delta;
 	void prop() {
 		key.w += delta;
 		if (l) l->delta += delta;
@@ -30,46 +27,49 @@ Node *merge(Node *a, Node *b) {
 	if (!a || !b) return a ?: b;
 	a->prop(), b->prop();
 	if (a->key.w > b->key.w) swap(a, b);
-	swap(a->l, (a->r = merge(b, a->r)));
+	swap(a->l, a->r = merge(b, a->r));
 	return a;
 }
 void pop(Node*& a) { a->prop(); a = merge(a->l, a->r); }
 
-pair<ll, vi> dmst(int n, int r, vector<Edge>& g) {
-	RollbackUF uf(n);
-	vector<Node*> heap(n);
-	for (Edge e : g) heap[e.b] = merge(heap[e.b], new Node{e});
-	ll res = 0;
-	vi seen(n, -1), path(n), par(n);
-	seen[r] = r;
-	vector<Edge> Q(n), in(n, {-1,-1}), comp;
-	deque<tuple<int, int, vector<Edge>>> cycs;
-	rep(s,0,n) {
-		int u = s, qi = 0, w;
+pair<ll,vi> dmst(int n, int r, const vector<Edge>& g) {
+	DSUrb dsu; dsu.init(n); 
+	vector<Node*> heap(n); // store edges entering each vertex 
+	// in increasing order of weight
+	each(e,g) heap[e.b] = merge(heap[e.b], new Node{e});
+	ll res = 0; vi seen(n,-1); seen[r] = r; 
+	vpi in(n,{-1,-1}); // edge entering each vertex in MST
+	vector<pair<int,vector<Edge>>> cycs;
+	F0R(s,n) {
+		int u = s, w;
+		vector<pair<int,Edge>> path; 
 		while (seen[u] < 0) {
 			if (!heap[u]) return {-1,{}};
-			Edge e = heap[u]->top();
+			seen[u] = s;
+			Edge e = heap[u]->top(); path.pb({u,e}); 
 			heap[u]->delta -= e.w, pop(heap[u]);
-			Q[qi] = e, path[qi++] = u, seen[u] = s;
-			res += e.w, u = uf.find(e.a);
-			if (seen[u] == s) { /// found cycle, contract
-				Node* cyc = 0;
-				int end = qi, time = uf.time();
-				do cyc = merge(cyc, heap[w = path[--qi]]);
-				while (uf.join(u, w));
-				u = uf.find(u), heap[u] = cyc, seen[u] = -1;
-				cycs.push_front({u, time, {&Q[qi], &Q[end]}});
+			res += e.w, u = dsu.get(e.a); 
+			if (seen[u] == s) { // found cycle, contract
+				Node* cyc = 0; cycs.eb();
+				do {
+					cyc = merge(cyc, heap[w = path.bk.f]);
+					cycs.bk.s.pb(path.bk.s);
+					path.pop_back(); 
+				} while (dsu.unite(u,w));
+				u = dsu.get(u); heap[u] = cyc, seen[u] = -1;
+				cycs.bk.f = u;
 			}
 		}
-		rep(i,0,qi) in[uf.find(Q[i].b)] = Q[i];
+		each(t,path) in[dsu.get(t.s.b)] = {t.s.a,t.s.b}; 
+	} // found path from root to s, done
+	while (sz(cycs)) { // expand cycs to restore sol
+		auto c = cycs.bk; cycs.pop_back();
+		pi inEdge = in[c.f];
+		each(t,c.s) dsu.rollback();
+		each(t,c.s) in[dsu.get(t.b)] = {t.a,t.b};
+		in[dsu.get(inEdge.s)] = inEdge;
 	}
-
-	for (auto& [u,t,comp] : cycs) { // restore sol (optional)
-		uf.rollback(t);
-		Edge inEdge = in[u];
-		for (auto& e : comp) in[uf.find(e.b)] = e;
-		in[uf.find(inEdge.b)] = inEdge;
-	}
-	rep(i,0,n) par[i] = in[i].a;
-	return {res, par};
+	vi par(n); F0R(i,n) par[i] = in[i].f; 
+	// i == r ? in[i].s == -1 : in[i].s == i
+	return {res,par};
 }
