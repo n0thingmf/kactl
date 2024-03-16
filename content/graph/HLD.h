@@ -15,51 +15,53 @@
  */
 #pragma once
 
-#include "../data-structures/LazySegmentTree.h"
-
-template <bool VALS_EDGES> struct HLD {
-	int N, tim = 0;
-	vector<vi> adj;
-	vi par, siz, depth, rt, pos;
-	Node *tree;
-	HLD(vector<vi> adj_)
-		: N(sz(adj_)), adj(adj_), par(N, -1), siz(N, 1), depth(N),
-		  rt(N),pos(N),tree(new Node(0, N)){ dfsSz(0); dfsHld(0); }
-	void dfsSz(int v) {
-		if (par[v] != -1) adj[v].erase(find(all(adj[v]), par[v]));
-		for (int& u : adj[v]) {
-			par[u] = v, depth[u] = depth[v] + 1;
-			dfsSz(u);
-			siz[v] += siz[u];
-			if (siz[u] > siz[adj[v][0]]) swap(u, adj[v][0]);
+template<int SZ, bool VALS_IN_EDGES> struct HLD { 
+	int N; vi adj[SZ];
+	int par[SZ], root[SZ], depth[SZ], sz[SZ], ti;
+	int pos[SZ]; vi rpos; // rpos not used but could be useful
+	void ae(int x, int y) { adj[x].pb(y), adj[y].pb(x); }
+	void dfsSz(int x) { 
+		sz[x] = 1; 
+		each(y,adj[x]) {
+			par[y] = x; depth[y] = depth[x]+1;
+			adj[y].erase(find(all(adj[y]),x)); /// remove parent from adj list
+			dfsSz(y); sz[x] += sz[y];
+			if (sz[y] > sz[adj[x][0]]) swap(y,adj[x][0]);
 		}
 	}
-	void dfsHld(int v) {
-		pos[v] = tim++;
-		for (int u : adj[v]) {
-			rt[u] = (u == adj[v][0] ? rt[v] : u);
-			dfsHld(u);
-		}
+	void dfsHld(int x) {
+		pos[x] = ti++; rpos.pb(x);
+		each(y,adj[x]) {
+			root[y] = (y == adj[x][0] ? root[x] : y);
+			dfsHld(y); }
 	}
-	template <class B> void process(int u, int v, B op) {
-		for (; rt[u] != rt[v]; v = par[rt[v]]) {
-			if (depth[rt[u]] > depth[rt[v]]) swap(u, v);
-			op(pos[rt[v]], pos[v] + 1);
-		}
-		if (depth[u] > depth[v]) swap(u, v);
-		op(pos[u] + VALS_EDGES, pos[v] + 1);
+	void init(int _N, int R = 0) { N = _N; 
+		par[R] = depth[R] = ti = 0; dfsSz(R); 
+		root[R] = R; dfsHld(R); 
 	}
-	void modifyPath(int u, int v, int val) {
-		process(u, v, [&](int l, int r) { tree->add(l, r, val); });
+	int lca(int x, int y) {
+		for (; root[x] != root[y]; y = par[root[y]])
+			if (depth[root[x]] > depth[root[y]]) swap(x,y);
+		return depth[x] < depth[y] ? x : y;
 	}
-	int queryPath(int u, int v) { // Modify depending on problem
-		int res = -1e9;
-		process(u, v, [&](int l, int r) {
-				res = max(res, tree->query(l, r));
-		});
-		return res;
+	/// int dist(int x, int y) { // # edges on path
+	/// 	return depth[x]+depth[y]-2*depth[lca(x,y)]; }
+	LazySeg<ll,SZ> tree; // segtree for sum
+	template <class BinaryOp>
+	void processPath(int x, int y, BinaryOp op) {
+		for (; root[x] != root[y]; y = par[root[y]]) {
+			if (depth[root[x]] > depth[root[y]]) swap(x,y);
+			op(pos[root[y]],pos[y]); }
+		if (depth[x] > depth[y]) swap(x,y);
+		op(pos[x]+VALS_IN_EDGES,pos[y]); 
 	}
-	int querySubtree(int v) { // modifySubtree is similar
-		return tree->query(pos[v] + VALS_EDGES, pos[v] + siz[v]);
-	}
+	void modifyPath(int x, int y, int v) { 
+		processPath(x,y,[this,&v](int l, int r) { 
+			tree.upd(l,r,v); }); }
+	ll queryPath(int x, int y) { 
+		ll res = 0; processPath(x,y,[this,&res](int l, int r) { 
+			res += tree.query(l,r); });
+		return res; }
+	void modifySubtree(int x, int v) { 
+		tree.upd(pos[x]+VALS_IN_EDGES,pos[x]+sz[x]-1,v); }
 };
