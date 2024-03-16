@@ -1,0 +1,15 @@
+set number
+set relativenumber
+set tabstop=4
+set softtabstop=4
+set shiftwidth=4
+
+map gA m'ggVG"+y''
+
+autocmd filetype cpp nnoremap <F5> :w <bar> !g++-13 -O2 -Wall -Wno-unused-result -std=c++17 % -o a<CR>
+
+autocmd filetype cpp nnoremap <F8> :w <bar> ! ./a < in.txt <CR>
+autocmd filetype cpp nnoremap <F9> :w <bar> ! ./a < in2.txt <CR>
+autocmd filetype cpp nnoremap <F10> :w <bar> ! ./a < in3.txt <CR>
+
+

@@ -153,4 +153,3 @@ vector<int> suffix_array(vector<int> &s){
 	return a;
 }
 
-
